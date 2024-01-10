@@ -1,7 +1,7 @@
 const { Octokit } = require('@octokit/core');
 const core = require('@actions/core');
 
-function findEmailCommitAPI(apiData) {
+function findEmailCommitAPI(apiData, startIndex = 0) {
   const emailPosition = apiData.indexOf('"email":"');
 
   if (emailPosition < 0) {
@@ -56,14 +56,30 @@ async function run() {
 
       //fetch user's public events page
       octokit
-        .request(`GET /users/${usernameForEmail}/events/public`)
-        // .then(function (response) {
-        //   // When the page is loaded convert it to text
-        //   return response.text();
-        // })
-        .then(apiData => {
-          console.log('API DATA: ', apiData);
-          const emailEventsPage = findEmailCommitAPI(apiData);
+        .request(`GET /users/${usernameForEmail}/events`)
+        .then(({ data: events }) => {
+          console.log('API DATA: ', JSON.stringify(events, null, 2));
+
+          // const event = events.find(event => {
+          //   return event.payload.commits.some(
+          //     commit =>
+          //       commit.author.email && !commit.author.email.includes('users.noreply.github.com')
+          //   );
+          // });
+          // const commit =
+          //   event &&
+          //   event.payload.commits.find(
+          //     commit =>
+          //       commit.author.email && !commit.author.email.includes('users.noreply.github.com')
+          //   );
+          // const emailEventsPage = commit && commit.author.email;
+
+          const emailEventsPage = events
+            .flatMap(event => event.payload.commits)
+            .flatMap(commit => commit.author.email)
+            .find(email => email && !email.includes('users.noreply.github.com'));
+
+          // const emailEventsPage = findEmailCommitAPI(apiData);
 
           if (emailEventsPage == null) {
             throw Error('[!!!] Could not find email in API Data');
