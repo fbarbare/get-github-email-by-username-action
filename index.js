@@ -25,14 +25,15 @@ async function run() {
   try {
     //inputs defined in action metadata file
     const usernameForEmail = process.env.USERNAME;
+
     const token = process.env.TOKEN;
+    const octokit = new Octokit({ auth: `${token}` });
 
     console.log(`[*] Getting ${usernameForEmail}\'s GitHub email`);
 
     //attempt to use auth token to get email via accessing the user's API page
     let userAPIData = null;
     try {
-      const octokit = new Octokit({ auth: `${token}` });
       userAPIData = await octokit.request(`GET /users/${usernameForEmail}`, {});
     } catch (error) {
       console.log('[!] ' + error.message);
