@@ -1,40 +1,20 @@
 const { Octokit } = require('@octokit/core');
 const core = require('@actions/core');
 
-function findEmailCommitAPI(apiData, startIndex = 0) {
-  const emailPosition = apiData.indexOf('"email":"');
-
-  if (emailPosition < 0) {
-    return null;
-  }
-
-  const email = apiData.substring(
-    emailPosition + 9,
-    emailPosition + 9 + apiData.substring(emailPosition + 9).indexOf('"')
-  );
-
-  //if found a bot email, continue searching
-  if (email.indexOf('users.noreply.github.com') >= 0) {
-    return findEmailCommitAPI(apiData.substring(emailPosition + 9));
-  } else {
-    return email;
-  }
-}
-
 async function run() {
   try {
     //inputs defined in action metadata file
-    const usernameForEmail = process.env.USERNAME;
+    const username = process.env.USERNAME;
 
     const token = process.env.TOKEN;
     const octokit = new Octokit({ auth: `${token}` });
 
-    console.log(`[*] Getting ${usernameForEmail}\'s GitHub email`);
+    console.log(`[*] Getting ${username}\'s GitHub email`);
 
     //attempt to use auth token to get email via accessing the user's API page
     let userAPIData = null;
     try {
-      userAPIData = await octokit.request(`GET /users/${usernameForEmail}`, {});
+      userAPIData = await octokit.request(`GET /users/${username}`, {});
     } catch (error) {
       console.log('[!] ' + error.message);
     }
@@ -50,49 +30,66 @@ async function run() {
       emailUserpage = userAPIData.data.email;
     }
 
+    const OWNER = process.env.OWNER;
+    if (!emailUserpage && OWNER) {
+      console.log(`[*] Falling back to old owner retrieval method`);
+
+      const response = await octokit.graphql(
+        `query {
+          organization(login: "${OWNER}") {
+            repositories(first: 100) {
+              nodes {
+                name
+                ref(qualifiedName: "master") {
+                  target {
+                    ... on Commit {
+                      history(first: 100, author: {id: "${username}"}, since: "2022-01-01T00:00:00Z") {
+                        nodes {
+                          message
+                          committedDate
+                          author {
+                            name
+                            email
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }`,
+        { login: 'octokit' }
+      );
+      console.log('API Data:', JSON.stringify(response, null, 2));
+    }
+
     //email not found on user's API page or failed to authenticate with token, fallback to old method to attempt email retrieval
     if (emailUserpage == null) {
       console.log(`[*] Falling back to old API retrieval method`);
 
       //fetch user's public events page
       octokit
-        .request(`GET /users/${usernameForEmail}/events`)
+        .request(`GET /users/${username}/events`)
         .then(({ data: events }) => {
-          console.log('API DATA: ', JSON.stringify(events, null, 2));
-
-          // const event = events.find(event => {
-          //   return event.payload.commits.some(
-          //     commit =>
-          //       commit.author.email && !commit.author.email.includes('users.noreply.github.com')
-          //   );
-          // });
-          // const commit =
-          //   event &&
-          //   event.payload.commits.find(
-          //     commit =>
-          //       commit.author.email && !commit.author.email.includes('users.noreply.github.com')
-          //   );
-          // const emailEventsPage = commit && commit.author.email;
-
           const emailEventsPage = events
             .flatMap(event => event.payload.commits || [])
             .map(commit => commit.author.email)
             .find(email => email && !email.includes('users.noreply.github.com'));
 
-          // const emailEventsPage = findEmailCommitAPI(apiData);
-
           if (emailEventsPage == null) {
             throw Error('[!!!] Could not find email in API Data');
           }
 
-          console.log(`[*] Found ${usernameForEmail}\'s email: ${emailEventsPage}`);
+          console.log(`[*] Found ${username}\'s email: ${emailEventsPage}`);
           core.setOutput('email', emailEventsPage);
         })
         .catch(error => {
           core.setFailed(error.message);
         });
     } else {
-      console.log(`[*] Found ${usernameForEmail}\'s email: ${emailUserpage}`);
+      console.log(`[*] Found ${username}\'s email: ${emailUserpage}`);
       core.setOutput('email', emailUserpage);
     }
   } catch (error) {
