@@ -75,8 +75,8 @@ async function run() {
           // const emailEventsPage = commit && commit.author.email;
 
           const emailEventsPage = events
-            .flatMap(event => event.payload.commits)
-            .flatMap(commit => commit.author.email)
+            .flatMap(event => event.payload.commits || [])
+            .map(commit => commit.author.email)
             .find(email => email && !email.includes('users.noreply.github.com'));
 
           // const emailEventsPage = findEmailCommitAPI(apiData);
