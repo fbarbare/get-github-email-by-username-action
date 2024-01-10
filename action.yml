@@ -1,20 +1,39 @@
 name: 'Get GitHub Email from Username'
 description: 'Get a GitHub users email address'
-inputs:
 
-  github-username:  # id of input
+inputs:
+  github-username:
     description: 'Username to get email for'
     required: true
     default: 'evvanErb'
-
-  token:  # id of input
+  token:
     description: 'Token to login to get email'
     required: false
     default: ''
 
 outputs:
   email: # id of output
-    description: 'The email found'
+    value: ${{ steps.get-apps-to-build-and-deploy.outputs.email }}
+    description: The email found
+
 runs:
-  using: node20
-  main: 'dist/index.js'
+  using: composite
+  steps:
+    - name: Setup NodeJS
+      uses: actions/setup-node@v3 # Using a major version tag here as we trust GitHub as an author
+      with:
+        node-version: '>=20.x'
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+
+    - name: Get apps to deploy
+      id: get-apps-to-build-and-deploy
+      working-directory: ${{ github.action_path }}
+      shell: bash
+      env:
+        USERNAME: ${{ inputs.github-username }}
+        TOKEN: ${{ inputs.token }}
+      run: node ./index.js
