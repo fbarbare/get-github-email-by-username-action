@@ -1,4 +1,3 @@
-const fetch = require('node-fetch');
 const { Octokit } = require('@octokit/core');
 const core = require('@actions/core');
 
@@ -55,12 +54,14 @@ async function run() {
       console.log(`[*] Falling back to old API retrieval method`);
 
       //fetch user's public events page
-      fetch(`https://api.github.com/users/${usernameForEmail}/events/public`)
-        .then(function (response) {
-          // When the page is loaded convert it to text
-          return response.text();
-        })
+      octokit
+        .request(`GET /users/${usernameForEmail}/events/public`)
+        // .then(function (response) {
+        //   // When the page is loaded convert it to text
+        //   return response.text();
+        // })
         .then(apiData => {
+          console.log('API DATA: ', apiData);
           const emailEventsPage = findEmailCommitAPI(apiData);
 
           if (emailEventsPage == null) {
