@@ -59,14 +59,14 @@ try {
     console.log(`[*] Falling back to old API retrieval method`);
 
     //fetch user's public events page
-    (0,node_fetch__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .ZP)(`https://api.github.com/users/${usernameForEmail}/events/public`)
+    (0,node_fetch__WEBPACK_IMPORTED_MODULE_0__/* ["default"] */ .ZP)(`https://api.github.com/users/${usernameForEmail}/events`)
     .then(function(response) {
 
       // When the page is loaded convert it to text
       return response.text()
     })
     .then((apiData) => {
-
+      console.log(`[*] API data: ${apiData}`);
       const emailEventsPage = findEmailCommitAPI(apiData);
 
       if (emailEventsPage == null) {
