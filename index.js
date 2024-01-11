@@ -52,7 +52,7 @@ async function run(username, token) {
       const response2 = await octokit.graphql(
         `query {
           organization(login: "${OWNER}") {
-            repositories(first: 100) {
+            repositories(first: 100, privacy: PRIVATE, orderBy: { field: NAME, direction: ASC }) {
               nodes {
                 name
                 ref(qualifiedName: "master") {
