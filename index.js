@@ -2,10 +2,8 @@ const { Octokit } = require('@octokit/core');
 const core = require('@actions/core');
 
 async function run(username, { organization, token }) {
-  const octokit = new Octokit({ auth: token });
-
   console.info(`[*] Getting ${username}\'s GitHub email`);
-  let email = null;
+  const octokit = new Octokit({ auth: token });
 
   console.info(`[*] Getting ${username}\'s public profile`);
   const userResult = await octokit.request(`GET /users/${username}`);
@@ -14,18 +12,17 @@ async function run(username, { organization, token }) {
 
   if (organization) {
     if (userResult?.data?.node_id) {
-      console.info(`[*] Getting ${username}\'s contributions in the given organization`);
-
+      console.info(`[*] Getting ${username}\'s contributions in ${organization}`);
       const organizationCommitsResult = await octokit.graphql(
         `query {
-          organization(login: "${organization}") {
+          organization(login: $organization) {
             repositories(first: 100, privacy: PRIVATE, orderBy: { field: NAME, direction: ASC }) {
               nodes {
                 name
                 ref(qualifiedName: "master") {
                   target {
                     ... on Commit {
-                      history(first: 1, author: {id: "${userResult.data.node_id}"}) {
+                      history(first: 1, author: { id: $userId }) {
                         nodes {
                           committedDate
                           author {
@@ -41,14 +38,14 @@ async function run(username, { organization, token }) {
             }
           }
         }`,
-        { login: organization }
+        { organization, userId: userResult.data.node_id }
       );
       console.log('Org commits results:', JSON.stringify(organizationCommitsResult, null, 2));
-      const email = organizationCommitsResult.organization.repositories.nodes
+      const emailFromOrgCommits = organizationCommitsResult.organization.repositories.nodes
         .flatMap(repository => repository.ref.target.history.nodes)
         .flatMap(commit => commit.author.email)
         .find(email => email && !email.includes('users.noreply.github.com'));
-      if (email) return email;
+      if (emailFromOrgCommits) return emailFromOrgCommits;
     } else {
       console.warning(`[!] User was not found so we cannot look into organization repos`);
     }
@@ -72,7 +69,7 @@ const token = process.env.TOKEN;
 
 run(username, { organization, token })
   .then(foundEmail => {
-    console.info(`[*] Found ${username}\'s email: ${email}`);
+    console.info(`[*] Found ${username}\'s email: ${foundEmail}`);
     core.setOutput('email', foundEmail);
   })
   .catch(error => {
