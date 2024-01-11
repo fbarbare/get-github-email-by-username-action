@@ -45,7 +45,7 @@ async function run(username, token) {
             }
           }
         }`,
-        { login: 'octokit' }
+        { login: OWNER }
       );
       console.log('API Data:', JSON.stringify(response, null, 2));
     } else {
