@@ -14,7 +14,7 @@ async function run(username, { organization, token }) {
     if (userResult?.data?.node_id) {
       console.info(`[*] Getting ${username}\'s contributions in ${organization}`);
       const organizationCommitsResult = await octokit.graphql(
-        `query commits($organization: String!, $userId: String!) {
+        `query commits($organization: String!, $userId: ID!) {
           organization(login: $organization) {
             repositories(first: 100, privacy: PRIVATE, orderBy: { field: NAME, direction: ASC }) {
               nodes {
