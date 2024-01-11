@@ -49,7 +49,7 @@ async function run(username, token) {
       );
       console.log('API Data:', JSON.stringify(response, null, 2));
 
-      const response = await octokit.graphql(
+      const response2 = await octokit.graphql(
         `query {
           organization(login: "${OWNER}") {
             repositories(first: 100) {
@@ -76,7 +76,7 @@ async function run(username, token) {
         }`,
         { login: OWNER }
       );
-      console.log('API Data:', JSON.stringify(response, null, 2));
+      console.log('API Data:', JSON.stringify(response2, null, 2));
     } else {
       console.log(`[!] User was not found so we cannot look into owner repos`);
     }
