@@ -1,64 +1,31 @@
 const { Octokit } = require('@octokit/core');
 const core = require('@actions/core');
 
-async function run(username, token) {
+async function run(username, { organization, token }) {
   const octokit = new Octokit({ auth: token });
 
-  console.log(`[*] Getting ${username}\'s GitHub email`);
+  console.info(`[*] Getting ${username}\'s GitHub email`);
   let email = null;
 
-  console.log(`[*] Getting ${username}\'s public profile`);
+  console.info(`[*] Getting ${username}\'s public profile`);
   const userResult = await octokit.request(`GET /users/${username}`);
+  console.log('User result:', JSON.stringify(userResult, null, 2));
   if (userResult?.data?.email) return userResult.data.email;
 
-  const OWNER = process.env.OWNER;
-  if (OWNER) {
+  if (organization) {
     if (userResult?.data?.node_id) {
-      console.log(`[*] Getting ${username}\'s contributions`);
+      console.info(`[*] Getting ${username}\'s contributions in the given organization`);
 
-      const response = await octokit.graphql(
+      const organizationCommitsResult = await octokit.graphql(
         `query {
-          user(login: "${username}") {
-            id
-            repositoriesContributedTo(first: 100, contributionTypes: COMMIT, includeUserRepositories: true) {
-              nodes {
-                name
-                ref(qualifiedName: "master") {
-                  name
-                  target {
-                    ... on Commit {
-                      history(author: {id: "${userResult.data.node_id}"}, first: 1) {
-                        nodes {
-                          committedDate
-                          author {
-                            email
-                            user {
-                              login
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }`,
-        { login: OWNER }
-      );
-      console.log('API Data:', JSON.stringify(response, null, 2));
-
-      const response2 = await octokit.graphql(
-        `query {
-          organization(login: "${OWNER}") {
+          organization(login: "${organization}") {
             repositories(first: 100, privacy: PRIVATE, orderBy: { field: NAME, direction: ASC }) {
               nodes {
                 name
                 ref(qualifiedName: "master") {
                   target {
                     ... on Commit {
-                      history(first: 1, author: {id: "${userResult.data.node_id}"}, since: "2022-01-01T00:00:00Z") {
+                      history(first: 1, author: {id: "${userResult.data.node_id}"}) {
                         nodes {
                           committedDate
                           author {
@@ -74,16 +41,22 @@ async function run(username, token) {
             }
           }
         }`,
-        { login: OWNER }
+        { login: organization }
       );
-      console.log('API Data:', JSON.stringify(response2, null, 2));
+      console.log('Org commits results:', JSON.stringify(organizationCommitsResult, null, 2));
+      const email = organizationCommitsResult.organization.repositories.nodes
+        .flatMap(repository => repository.ref.target.history.nodes)
+        .flatMap(commit => commit.author.email)
+        .find(email => email && !email.includes('users.noreply.github.com'));
+      if (email) return email;
     } else {
-      console.log(`[!] User was not found so we cannot look into owner repos`);
+      console.warning(`[!] User was not found so we cannot look into organization repos`);
     }
   }
 
-  console.log(`[*] Getting ${username}\'s activity on public repos`);
+  console.info(`[*] Getting ${username}\'s activity on public repos`);
   const eventsResult = await octokit.request(`GET /users/${username}/events`);
+  console.log('Public events result:', JSON.stringify(eventsResult, null, 2));
   const emailFromEvents = eventsResult.data
     .flatMap(event => event.payload.commits || [])
     .map(commit => commit.author.email)
@@ -94,11 +67,12 @@ async function run(username, token) {
 }
 
 const username = process.env.USERNAME;
+const organization = process.env.ORGANIZATION;
 const token = process.env.TOKEN;
 
-run(username, token)
+run(username, { organization, token })
   .then(foundEmail => {
-    console.log(`[*] Found ${username}\'s email: ${email}`);
+    console.info(`[*] Found ${username}\'s email: ${email}`);
     core.setOutput('email', foundEmail);
   })
   .catch(error => {
