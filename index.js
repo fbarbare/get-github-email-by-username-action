@@ -1,42 +1,24 @@
 const { Octokit } = require('@octokit/core');
 const core = require('@actions/core');
 
-async function run() {
-  try {
-    //inputs defined in action metadata file
-    const username = process.env.USERNAME;
+async function run(username, token) {
+  const octokit = new Octokit({ auth: token });
 
-    const token = process.env.TOKEN;
-    const octokit = new Octokit({ auth: `${token}` });
+  console.log(`[*] Getting ${username}\'s GitHub email`);
+  let email = null;
 
-    console.log(`[*] Getting ${username}\'s GitHub email`);
+  console.log(`[*] Getting ${username}\'s public profile`);
+  const userResult = await octokit.request(`GET /users/${username}`);
+  if (userResult?.data?.email) return userResult.data.email;
 
-    //attempt to use auth token to get email via accessing the user's API page
-    let userAPIData = null;
-    try {
-      userAPIData = await octokit.request(`GET /users/${username}`, {});
-    } catch (error) {
-      console.log('[!] ' + error.message);
-    }
-
-    // Extract the email if the user's API was accessed successfully
-    let emailUserpage = null;
-    if (
-      userAPIData != null &&
-      userAPIData.data != null &&
-      userAPIData.data.email != null &&
-      userAPIData.data.email != ''
-    ) {
-      emailUserpage = userAPIData.data.email;
-    }
-
-    const OWNER = process.env.OWNER;
-    if (!emailUserpage && OWNER) {
-      console.log(`[*] Falling back to old owner retrieval method`);
+  const OWNER = process.env.OWNER;
+  if (OWNER) {
+    if (userResult?.data?.node_id) {
+      console.log(`[*] Getting ${username}\'s contributions`);
 
       const response = await octokit.graphql(
         `query {
-          user(login: "fbarbare") {
+          user(login: "${username}") {
             id
             repositoriesContributedTo(first: 100, contributionTypes: COMMIT, includeUserRepositories: true) {
               nodes {
@@ -45,7 +27,7 @@ async function run() {
                   name
                   target {
                     ... on Commit {
-                      history(author: {id: "MDQ6VXNlcjUwNTUyNDg="}, first: 1) {
+                      history(author: {id: "${userResult.data.node_id}"}, first: 1) {
                         nodes {
                           committedDate
                           author {
@@ -66,39 +48,31 @@ async function run() {
         { login: 'octokit' }
       );
       console.log('API Data:', JSON.stringify(response, null, 2));
-    }
-
-    //email not found on user's API page or failed to authenticate with token, fallback to old method to attempt email retrieval
-    if (emailUserpage == null) {
-      console.log(`[*] Falling back to old API retrieval method`);
-
-      //fetch user's public events page
-      octokit
-        .request(`GET /users/${username}/events`)
-        .then(({ data: events }) => {
-          const emailEventsPage = events
-            .flatMap(event => event.payload.commits || [])
-            .map(commit => commit.author.email)
-            .find(email => email && !email.includes('users.noreply.github.com'));
-
-          if (emailEventsPage == null) {
-            throw Error('[!!!] Could not find email in API Data');
-          }
-
-          console.log(`[*] Found ${username}\'s email: ${emailEventsPage}`);
-          core.setOutput('email', emailEventsPage);
-        })
-        .catch(error => {
-          core.setFailed(error.message);
-        });
     } else {
-      console.log(`[*] Found ${username}\'s email: ${emailUserpage}`);
-      core.setOutput('email', emailUserpage);
+      console.log(`[!] User was not found so we cannot look into owner repos`);
     }
-  } catch (error) {
-    core.setFailed(error.message);
-    throw error;
   }
+
+  console.log(`[*] Getting ${username}\'s activity on public repos`);
+  const eventsResult = await octokit.request(`GET /users/${username}/events`);
+  const emailFromEvents = eventsResult.data
+    .flatMap(event => event.payload.commits || [])
+    .map(commit => commit.author.email)
+    .find(email => email && !email.includes('users.noreply.github.com'));
+  if (emailFromEvents) return emailFromEvents;
+
+  throw Error(`[!!!] Could not find ${username}'s email`);
 }
 
-run().catch(console.error);
+const username = process.env.USERNAME;
+const token = process.env.TOKEN;
+
+run(username, token)
+  .then(foundEmail => {
+    console.log(`[*] Found ${username}\'s email: ${email}`);
+    core.setOutput('email', foundEmail);
+  })
+  .catch(error => {
+    console.error(error);
+    core.setFailed(error.message);
+  });
