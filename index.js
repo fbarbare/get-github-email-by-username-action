@@ -36,19 +36,16 @@ async function run() {
 
       const response = await octokit.graphql(
         `query {
-          organization(login: "${OWNER}") {
-            repositories(first: 100) {
+          user(login: "${username}") {
+            id
+            repositoriesContributedTo(first: 100, contributionTypes: COMMIT, includeUserRepositories: true) {
               nodes {
-                name
                 ref(qualifiedName: "master") {
                   target {
                     ... on Commit {
-                      history(first: 100, author: {id: "${username}"}, since: "2022-01-01T00:00:00Z") {
+                      history(author: {id: "${userAPIData.data.node_id}"}, first: 1) {
                         nodes {
-                          message
-                          committedDate
                           author {
-                            name
                             email
                           }
                         }
